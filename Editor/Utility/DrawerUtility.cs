@@ -80,8 +80,15 @@ namespace VaporUIElementsEditor
                 index++;
             }
 
+            var tooltip = "";
+            if (drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr))
+            {
+                tooltip = rtAtr.Tooltip;
+            }
+
             var field = new DropdownField(drawer.Property.displayName, keys, index)
             {
+                tooltip = tooltip,
                 userData = values
             };
             field.AddToClassList("unity-base-field__aligned");
@@ -147,10 +154,16 @@ namespace VaporUIElementsEditor
             {
                 val = drawer.FieldInfo.GetValue(clonedTarget).ToString();
             }
+            var tooltip = "";
+            if (drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr))
+            {
+                tooltip = rtAtr.Tooltip;
+            }
             var prop = new TextField(drawer.Path[(drawer.Path.IndexOf("p_", StringComparison.Ordinal) + 2)..])
             {
                 name = drawerName,
             };
+            prop.Q<Label>().tooltip = tooltip;
             prop.SetValueWithoutNotify(val);
             prop.SetEnabled(false);
             if (cleanupImmediate)
@@ -177,8 +190,14 @@ namespace VaporUIElementsEditor
                 label = ObjectNames.NicifyVariableName(drawer.MethodInfo.Name);
             }
 
+            var tooltip = "";
+            if (drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr))
+            {
+                tooltip = rtAtr.Tooltip;
+            }
             var button = new StyledButton(atr.Size)
             {
+                tooltip = tooltip,
                 name = drawer.Path,
                 text = label,
                 userData = drawer
@@ -275,7 +294,8 @@ namespace VaporUIElementsEditor
             DrawDecorators(field, drawer);
             DrawLabel(field, drawer, resolvers);
             DrawLabelWidth(field, drawer);
-            DrawHideLabel(field, drawer);            
+            DrawHideLabel(field, drawer);  
+            DrawRichTooltip(field, drawer);
             DrawConditionals(field, drawer, resolvers);
             DrawReadOnly(field, drawer);
             DrawAutoReference(field, drawer);
@@ -408,6 +428,14 @@ namespace VaporUIElementsEditor
                 var label = field.Q<Label>();
                 label.style.display = DisplayStyle.None;
             }
+        }
+
+        public static void DrawRichTooltip(PropertyField field, VaporDrawerInfo drawer)
+        {
+            if (!drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr)) return;
+            
+            var label = field.Q<Label>();
+            label.tooltip = rtAtr.Tooltip;
         }
 
         public static void DrawDecorators(PropertyField field, VaporDrawerInfo drawer)
