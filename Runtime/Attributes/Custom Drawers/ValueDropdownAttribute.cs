@@ -1,8 +1,10 @@
 using System;
+using System.Diagnostics;
 using UnityEngine;
 
 namespace VaporUIElements
 {
+    [Conditional("VAPOR_INSPECTOR")]
     [AttributeUsage(AttributeTargets.Field, Inherited = true, AllowMultiple = true)]
     public class ValueDropdownAttribute : PropertyAttribute
     {
@@ -11,11 +13,10 @@ namespace VaporUIElements
 
         public ValueDropdownAttribute(string resolver)
         {
-            if (ResolverUtility.HasResolver(resolver, out var type))
-            {
-                ResolverType = type;
-                Resolver = resolver;
-            }
+            if (!ResolverUtility.HasResolver(resolver, out var type)) return;
+            
+            ResolverType = type;
+            Resolver = resolver;
         }
     }
 }

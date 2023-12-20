@@ -6,7 +6,7 @@ using UnityEngine.UIElements;
 
 namespace VaporUIElements
 {
-    public class StyledFoldout : Box
+    public class StyledFoldout : Box, ILabeledGroup
     {
         public Foldout Foldout { get; private set; }
         public Label Label { get; private set; }

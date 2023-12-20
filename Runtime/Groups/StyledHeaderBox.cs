@@ -5,7 +5,7 @@ using UnityEngine.UIElements;
 
 namespace VaporUIElements
 {
-    public class StyledHeaderBox : Box
+    public class StyledHeaderBox : Box, ILabeledGroup
     {
         public Label Label { get; private set; }
 

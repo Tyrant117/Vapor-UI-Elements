@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using UnityEngine;
 
 namespace VaporUIElements
@@ -6,7 +7,8 @@ namespace VaporUIElements
     /// <summary>
     /// Place this attribute on a <see cref="MonoBehaviour"/> or <see cref="ScriptableObject"/> that should be drawn with unity default drawers.
     /// </summary>
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+    [Conditional("VAPOR_INSPECTOR")]
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Field, AllowMultiple = false, Inherited = true)]
     public class DrawWithUnityAttribute : Attribute
     {
 

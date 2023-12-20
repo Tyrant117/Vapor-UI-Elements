@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
-using UnityEngine;
 using UnityEngine.UIElements;
 using VaporUIElements;
 using Object = UnityEngine.Object;
+// ReSharper disable UnusedAutoPropertyAccessor.Global
 
 namespace VaporUIElementsEditor
 {
@@ -26,8 +26,8 @@ namespace VaporUIElementsEditor
         public FieldInfo FieldInfo { get; }
         public MethodInfo MethodInfo { get; }
         public PropertyInfo PropertyInfo { get; }
-        public SerializedProperty Property { get; }
-        public object Target { get; }
+        public SerializedProperty Property { get; private set; }
+        public object Target { get; private set; }
 
         public VaporDrawerInfo Parent { get; }
         public bool HasParent { get; }
@@ -47,7 +47,7 @@ namespace VaporUIElementsEditor
         private readonly DrawWithVaporAttribute _drawWithVaporAttribute;
         private readonly UnManagedGroupAttribute _unmanagedGroupAttribute;
 
-        public VaporDrawerInfo(string path, FieldInfo fieldInfo, SerializedProperty property, object target, VaporDrawerInfo parentDrawer, Dictionary<string, VaporDrawerInfo> pathToDrawerMap)
+        public VaporDrawerInfo(string path, FieldInfo fieldInfo, SerializedProperty property, object target, VaporDrawerInfo parentDrawer/*, Dictionary<string, VaporDrawerInfo> pathToDrawerMap*/)
         {
             Path = path;
             FieldInfo = fieldInfo;
@@ -77,66 +77,65 @@ namespace VaporUIElementsEditor
                 HasUpdatedOrder = true;
             }
 
-            if (IsDrawnWithVapor)
+            if (!IsDrawnWithVapor) return;
+            
+            Children = new List<VaporDrawerInfo>();
+            HasChildren = true;
+            _drawWithVaporAttribute = FieldInfo.FieldType.GetCustomAttribute<DrawWithVaporAttribute>();
+            _unmanagedGroupAttribute = FieldInfo.FieldType.GetCustomAttribute<UnManagedGroupAttribute>() ?? new UnManagedGroupAttribute();
+            var targetType = FieldInfo.FieldType;
+            var subTarget = FieldInfo.GetValue(Target);
+            //Debug.Log($"{Path} - MyTarget: {subTarget}");
+            Stack<Type> typeStack = new();
+            while (targetType != null)
             {
-                Children = new List<VaporDrawerInfo>();
-                HasChildren = true;
-                _drawWithVaporAttribute = FieldInfo.FieldType.GetCustomAttribute<DrawWithVaporAttribute>();
-                _unmanagedGroupAttribute = FieldInfo.FieldType.GetCustomAttribute<UnManagedGroupAttribute>() ?? new UnManagedGroupAttribute();
-                var targetType = FieldInfo.FieldType;
-                var subTarget = FieldInfo.GetValue(Target);
-                //Debug.Log($"{Path} - MyTarget: {subTarget}");
-                Stack<Type> typeStack = new();
-                while (targetType != null)
-                {
-                    typeStack.Push(targetType);
-                    targetType = targetType.BaseType;
-                }
-                List<FieldInfo> fieldInfoList = new();
-                List<PropertyInfo> propertyInfoList = new();
-                List<MethodInfo> methodInfoList = new();
-                while (typeStack.TryPop(out var type))
-                {
-                    fieldInfoList.AddRange(type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
-                    propertyInfoList.AddRange(type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
-                    methodInfoList.AddRange(type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
-                }
+                typeStack.Push(targetType);
+                targetType = targetType.BaseType;
+            }
+            List<FieldInfo> fieldInfoList = new();
+            List<PropertyInfo> propertyInfoList = new();
+            List<MethodInfo> methodInfoList = new();
+            while (typeStack.TryPop(out var type))
+            {
+                fieldInfoList.AddRange(type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
+                propertyInfoList.AddRange(type.GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
+                methodInfoList.AddRange(type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly));
+            }
 
-                foreach (var field in fieldInfoList.Where(BaseVaporInspector.FieldSearchPredicate))
+            foreach (var field in fieldInfoList.Where(BaseVaporInspector.FieldSearchPredicate))
+            {
+                var relativeProperty = Property.FindPropertyRelative(field.Name);
+                var relTarget = Property.boxedValue;// SerializedPropertyUtility.GetTargetObjectWithProperty(relativeProperty);
+                var info = new VaporDrawerInfo(relativeProperty.propertyPath, field, relativeProperty, relTarget, this/*, pathToDrawerMap*/);
+                if (info.IsUnmanagedGroup)
                 {
-                    SerializedProperty relativeProperty = Property.FindPropertyRelative(field.Name);
-                    var relTarget = Property.boxedValue;// SerializedPropertyUtility.GetTargetObjectWithProperty(relativeProperty);
-                    var info = new VaporDrawerInfo(relativeProperty.propertyPath, field, relativeProperty, relTarget, this, pathToDrawerMap);
-                    if (info.IsUnmanagedGroup)
-                    {
-                        HasUnmanagedChildren = true;
-                    }
-                    Children.Add(info);
-                    pathToDrawerMap.Add(relativeProperty.propertyPath, info);
+                    HasUnmanagedChildren = true;
                 }
+                Children.Add(info);
+                // pathToDrawerMap.Add(relativeProperty.propertyPath, info);
+            }
                 
-                foreach (var childProperty in propertyInfoList.Where(BaseVaporInspector.PropertySearchPredicate))
+            foreach (var childProperty in propertyInfoList.Where(BaseVaporInspector.PropertySearchPredicate))
+            {
+                var info = new VaporDrawerInfo($"{Property.propertyPath}_p_{childProperty.Name}", childProperty, subTarget, this);
+                if (info.IsUnmanagedGroup)
                 {
-                    var info = new VaporDrawerInfo($"{Property.propertyPath}_p_{childProperty.Name}", childProperty, subTarget, this, pathToDrawerMap);
-                    if (info.IsUnmanagedGroup)
-                    {
-                        HasUnmanagedChildren = true;
-                    }
-                    Children.Add(info);
+                    HasUnmanagedChildren = true;
                 }
-                foreach (var method in methodInfoList.Where(BaseVaporInspector.MethodSearchPredicate))
-                {                    
-                    var info = new VaporDrawerInfo($"{Property.propertyPath}_m_{method.Name}", method, subTarget, this, pathToDrawerMap);
-                    if (info.IsUnmanagedGroup)
-                    {
-                        HasUnmanagedChildren = true;
-                    }
-                    Children.Add(info);
+                Children.Add(info);
+            }
+            foreach (var method in methodInfoList.Where(BaseVaporInspector.MethodSearchPredicate))
+            {                    
+                var info = new VaporDrawerInfo($"{Property.propertyPath}_m_{method.Name}", method, subTarget, this);
+                if (info.IsUnmanagedGroup)
+                {
+                    HasUnmanagedChildren = true;
                 }
+                Children.Add(info);
             }
         }
 
-        public VaporDrawerInfo(string path, PropertyInfo propertyInfo, object target, VaporDrawerInfo parentDrawer, Dictionary<string, VaporDrawerInfo> pathToDrawerMap)
+        public VaporDrawerInfo(string path, PropertyInfo propertyInfo, object target, VaporDrawerInfo parentDrawer)
         {
             Path = path;
             PropertyInfo = propertyInfo;
@@ -175,7 +174,7 @@ namespace VaporUIElementsEditor
             HasUpdatedOrder = true;
         }
 
-        public VaporDrawerInfo(string path, MethodInfo methodInfo, object target, VaporDrawerInfo parentDrawer, Dictionary<string, VaporDrawerInfo> pathToDrawerMap)
+        public VaporDrawerInfo(string path, MethodInfo methodInfo, object target, VaporDrawerInfo parentDrawer)
         {
             Path = path;
             MethodInfo = methodInfo;
@@ -206,7 +205,7 @@ namespace VaporUIElementsEditor
 
 
         #region - Drawing -
-        public void BuildGroups(BaseVaporInspector inspector, string rootName, VaporGroupNode node, Dictionary<string, VaporGroupNode> nodeBag)
+        public void BuildGroups(/*BaseVaporInspector inspector, */string rootName, VaporGroupNode node, Dictionary<string, VaporGroupNode> nodeBag)
         {
             //Debug.Log($"Draw Groups of {Path} with RootName: {rootName}");
             if (IsUnmanagedGroup)
@@ -217,12 +216,12 @@ namespace VaporUIElementsEditor
             }
             else
             {
-                string parentName = string.IsNullOrEmpty(rootName) ? $"{ContainingGroup.GroupName}" : $"{rootName}/{ContainingGroup.GroupName}";
+                // var parentName = string.IsNullOrEmpty(rootName) ? $"{ContainingGroup.GroupName}" : $"{rootName}/{ContainingGroup.GroupName}";
                 UpdatedGroupName = string.IsNullOrEmpty(rootName) ? $"{ContainingGroup.GroupName}/_{FieldInfo.Name}" : $"{rootName}/{ContainingGroup.GroupName}/_{FieldInfo.Name}";
                 //node = _DrawVerticalGroup(node, UpdatedGroupName, HasUpdatedOrder ? UpdatedOrder : ContainingGroup.Order);
                 node = _DrawInlineGroup(node, ObjectNames.NicifyVariableName(FieldInfo.Name), UpdatedGroupName, HasUpdatedOrder ? UpdatedOrder : ContainingGroup.Order);
             }
-            VaporGroupNode rootNode = node;
+            var rootNode = node;
             VaporGroupNode unmanagedNode = null;
             if (HasUnmanagedChildren)
             {
@@ -235,18 +234,18 @@ namespace VaporUIElementsEditor
                     child.UpdatedGroupName = $"{UpdatedGroupName}/{child.ContainingGroup.GroupName}";
                     foreach (var attribute in child.Groups)
                     {
-                        string parentName = attribute.ParentName != string.Empty ? $"{UpdatedGroupName}/{attribute.ParentName}" : UpdatedGroupName;
-                        string groupName = $"{UpdatedGroupName}/{attribute.GroupName}";
+                        // string parentName = attribute.ParentName != string.Empty ? $"{UpdatedGroupName}/{attribute.ParentName}" : UpdatedGroupName;
+                        var groupName = $"{UpdatedGroupName}/{attribute.GroupName}";
                         switch (attribute.Type)
                         {
                             case UIGroupType.Horizontal:
-                                if (attribute is HorizontalGroupAttribute horizontalAttribute)
+                                if (attribute is HorizontalGroupAttribute)
                                 {
                                     node = _DrawHorizontalGroup(node, groupName, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
                                 }
                                 break;
                             case UIGroupType.Vertical:
-                                if (attribute is VerticalGroupAttribute verticalAttribute)
+                                if (attribute is VerticalGroupAttribute)
                                 {
                                     node = _DrawVerticalGroup(node, groupName, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
                                 }
@@ -264,7 +263,7 @@ namespace VaporUIElementsEditor
                                 }
                                 break;
                             case UIGroupType.Tab:
-                                if (attribute is TabGroupAttribute tabAttribute)
+                                if (attribute is TabGroupAttribute)
                                 {
                                     node = _DrawTabGroup(node, groupName, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
                                 }
@@ -279,11 +278,11 @@ namespace VaporUIElementsEditor
                     }
                     if (child.IsDrawnWithVapor)
                     {
-                        child.BuildGroups(inspector, UpdatedGroupName, node, nodeBag);
+                        child.BuildGroups(/*inspector, */UpdatedGroupName, node, nodeBag);
                     }
                     else
                     {
-                        node.AddContent(inspector, child);
+                        node.AddContent(/*inspector, */child);
                     }
                 }
                 else
@@ -291,18 +290,18 @@ namespace VaporUIElementsEditor
                     child.UpdatedGroupName = UpdatedGroupName;
                     if (child.IsDrawnWithVapor)
                     {
-                        child.BuildGroups(inspector, UpdatedGroupName, rootNode, nodeBag);
+                        child.BuildGroups(/*inspector, */UpdatedGroupName, rootNode, nodeBag);
                     }
                     else
                     {
-                        unmanagedNode.AddContent(inspector, child);
+                        unmanagedNode.AddContent(/*inspector, */child);
                     }
                 }
             }
 
             VaporGroupNode _DrawUnmanagedGroup(VaporGroupNode parentNode, string groupName)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var order = _unmanagedGroupAttribute.UnmanagedGroupOrder;
                     VisualElement ve = _unmanagedGroupAttribute.UnmanagedGroupType switch
@@ -348,13 +347,13 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
             VaporGroupNode _DrawHorizontalGroup(VaporGroupNode parentNode, string groupName, int order)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var horizontal = new StyledHorizontalGroup
                     {
@@ -367,13 +366,13 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
             VaporGroupNode _DrawVerticalGroup(VaporGroupNode parentNode, string groupName, int order)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var vertical = new StyledVerticalGroup
                     {
@@ -386,13 +385,13 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
             VaporGroupNode _DrawFoldoutGroup(VaporGroupNode parentNode, string groupName, string header, int order)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var foldout = new StyledFoldout(header)
                     {
@@ -405,13 +404,13 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
             VaporGroupNode _DrawBoxGroup(VaporGroupNode parentNode, string groupName, string header, int order)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var box = new StyledHeaderBox(header)
                     {
@@ -424,13 +423,13 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
             VaporGroupNode _DrawTabGroup(VaporGroupNode parentNode, string groupName, int order)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var tabs = new StyledTabGroup()
                     {
@@ -443,13 +442,13 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
             VaporGroupNode _DrawTitleGroup(VaporGroupNode parentNode, string groupName, TitleGroupAttribute attribute, int order)
             {
-                if (!nodeBag.TryGetValue(groupName, out var node))
+                if (!nodeBag.TryGetValue(groupName, out var foundNode))
                 {
                     var title = new StyledTitleGroup(attribute)
                     {
@@ -462,7 +461,7 @@ namespace VaporUIElementsEditor
                 }
                 else
                 {
-                    return node;
+                    return foundNode;
                 }
             }
 
@@ -481,409 +480,47 @@ namespace VaporUIElementsEditor
             }
         }
 
-        public void PopulateNodeGraph(BaseVaporInspector inspector, Dictionary<string, VaporGroupNode> nodeBag)
+        public void Rebind(SerializedProperty property)
         {
+            var onlyTarget = InfoType switch
+            {
+                DrawerInfoType.Field => false,
+                DrawerInfoType.Property => true,
+                DrawerInfoType.Method => true,
+                _ => true
+            };
+
+            if (onlyTarget)
+            {
+                Property = property;
+                Target = property.boxedValue;
+            }
+            else
+            {
+                Property = property.FindPropertyRelative(FieldInfo.Name);
+                Target = property.boxedValue;
+            }
+
+            if (!HasChildren)
+            {
+                return;
+            }
+
             foreach (var child in Children)
             {
-                if (!child.IsDrawnWithVapor)
-                {
-                    if (!child.IsUnmanagedGroup)
-                    {
-                        //Debug.Log($"{child.Property.propertyPath} - {child.UpdatedGroupName}");
-                        if (nodeBag.TryGetValue(child.UpdatedGroupName, out var node))
-                        {
-                            switch (child.ContainingGroup.Type)
-                            {
-                                case UIGroupType.Horizontal:
-                                    _PopulateHorizontalGroup(node, child);
-                                    break;
-                                case UIGroupType.Vertical:
-                                    _PopulateVerticalGroup(node, child);
-                                    break;
-                                case UIGroupType.Foldout:
-                                    _PopulateFoldout(node, child);
-                                    break;
-                                case UIGroupType.Box:
-                                    _PopulateBox(node, child);
-                                    break;
-                                case UIGroupType.Tab:
-                                    break;
-                                case UIGroupType.Title:
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (nodeBag.TryGetValue($"{child.UpdatedGroupName}-Unmanaged", out var group))
-                        {
-                            //Debug.Log($"Populating Unamanged: {group.Parent.GroupName} - {group.GroupName}");
-                            _PopulateVerticalGroup(group, child);
-                        }
-                    }
-                }
-                if (child.HasChildren)
-                {
-                    child.PopulateNodeGraph(inspector, nodeBag);
-                }
-            }
-
-            void _PopulateHorizontalGroup(VaporGroupNode node, VaporDrawerInfo drawer)
-            {
-                bool isFirst = node.Container.childCount == 0;
-                var drawn = inspector.DrawVaporPropertyWithVerticalLayout(drawer, "vapor-horizontal-prop");
-                drawn.style.flexGrow = 1;
-                drawn.style.marginLeft = isFirst ? 0 : 2;
-                node.Container.Add(drawn);
-            }
-
-            void _PopulateVerticalGroup(VaporGroupNode node, VaporDrawerInfo drawer)
-            {
-                bool formatWithVerticalLayout = false;
-                var parentNode = node.Parent;
-                while (parentNode != null)
-                {
-                    if (parentNode.IsRootNode) { break; }
-
-                    var parentGroup = nodeBag[parentNode.GroupName];
-                    if (parentGroup.GroupType == UIGroupType.Horizontal)
-                    {
-                        formatWithVerticalLayout = true;
-                    }
-                    parentNode = parentNode.Parent;
-                }
-
-                bool isFirst = node.Container.childCount == 0;
-                if (formatWithVerticalLayout)
-                {
-                    var drawn = inspector.DrawVaporPropertyWithVerticalLayout(drawer, "vapor-vertical-prop");
-                    drawn.style.marginTop = 1;
-                    node.Container.Add(drawn);
-                }
-                else
-                {
-                    var drawn = inspector.DrawVaporProperty(drawer, "vapor-vertical-prop");
-                    drawn.style.marginTop = 1;
-                    node.Container.Add(drawn);
-                }
-            }
-
-            void _PopulateFoldout(VaporGroupNode node, VaporDrawerInfo drawer)
-            {
-                bool isFirst = node.Container.childCount == 0;
-                var drawn = inspector.DrawVaporProperty(drawer, "vapor-foldout-prop");
-                node.Container.Add(drawn);
-            }
-
-            void _PopulateBox(VaporGroupNode node, VaporDrawerInfo drawer)
-            {
-                bool isFirst = node.Container.childCount == 0;
-                var drawn = inspector.DrawVaporProperty(drawer, "vapor-box-prop");
-                node.Container.Add(drawn);
+                child.Rebind(Property);
             }
         }
 
-        public void DrawGroups(string rootName, Dictionary<string, GroupedVisualElement> groupBag, Dictionary<int, List<GroupedVisualElement>> orderBag)
+        #endregion
+
+        #region - Methods-
+
+        public void InvokeMethod()
         {
-            Debug.Log($"Draw Groups of {Path} with RootName: {rootName}");
-            if (IsDrawnWithVapor)
-            {
-                if (IsUnmanagedGroup)
-                {
-                    UpdatedGroupName = string.IsNullOrEmpty(rootName) ? $"_{FieldInfo.Name}" : $"{rootName}/_{FieldInfo.Name}";
-                    _DrawVerticalGroup(rootName, UpdatedGroupName, HasUpdatedOrder ? UpdatedOrder : int.MaxValue);
-                }
-                else
-                {
-                    string parentName = string.IsNullOrEmpty(rootName) ? $"{ContainingGroup.GroupName}" : $"{rootName}/{ContainingGroup.GroupName}";
-                    UpdatedGroupName = string.IsNullOrEmpty(rootName) ? $"{ContainingGroup.GroupName}/_{FieldInfo.Name}" : $"{rootName}/{ContainingGroup.GroupName}/_{FieldInfo.Name}";
-                    _DrawVerticalGroup(parentName, UpdatedGroupName, HasUpdatedOrder ? UpdatedOrder : ContainingGroup.Order);
-                }
-                bool anyUnmanaged = false;
-                foreach (var child in Children)
-                {
-                    if (!child.IsUnmanagedGroup)
-                    {
-                        child.UpdatedGroupName = $"{UpdatedGroupName}/{child.ContainingGroup.GroupName}";
-                        foreach (var attribute in child.Groups)
-                        {
-                            string parentName = attribute.ParentName != string.Empty ? $"{UpdatedGroupName}/{attribute.ParentName}" : UpdatedGroupName;
-                            string groupName = $"{UpdatedGroupName}/{attribute.GroupName}";
-                            switch (attribute.Type)
-                            {
-                                case UIGroupType.Horizontal:
-                                    if (attribute is HorizontalGroupAttribute horizontalAttribute)
-                                    {
-                                        _DrawHorizontalGroup(parentName, groupName, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
-                                    }
-                                    break;
-                                case UIGroupType.Vertical:
-                                    if (attribute is VerticalGroupAttribute verticalAttribute)
-                                    {
-                                        _DrawVerticalGroup(parentName, groupName, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
-                                    }
-                                    break;
-                                case UIGroupType.Foldout:
-                                    if (attribute is FoldoutGroupAttribute foldoutAttribute)
-                                    {
-                                        _DrawFoldoutGroup(parentName, groupName, foldoutAttribute.Header, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
-                                    }
-                                    break;
-                                case UIGroupType.Box:
-                                    if (attribute is BoxGroupAttribute boxAttribute)
-                                    {
-                                        _DrawBoxGroup(parentName, groupName, boxAttribute.Header, child.HasUpdatedOrder ? child.UpdatedOrder : attribute.Order);
-                                    }
-                                    break;
-                                case UIGroupType.Tab:
-                                    break;
-                                case UIGroupType.Title:
-                                    break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        child.UpdatedGroupName = UpdatedGroupName;
-                        anyUnmanaged = true;
-                    }
-                    if (anyUnmanaged)
-                    {
-                        _DrawUnmanagedGroup(UpdatedGroupName, $"{UpdatedGroupName}-Unmanaged", child.HasUpdatedOrder ? child.UpdatedOrder : int.MaxValue);
-                    }
-                    child.DrawGroups(UpdatedGroupName, groupBag, orderBag);
-                }
-            }
-
-            void _DrawUnmanagedGroup(string parentName, string groupName, int order)
-            {
-                if (!groupBag.ContainsKey(groupName))
-                {
-                    if (!orderBag.TryGetValue(order, out var propList))
-                    {
-                        propList = new();
-                        orderBag[order] = propList;
-                    }
-                    var vertical = new StyledVerticalGroup();
-                    GroupedVisualElement element = new()
-                    {
-                        parent = parentName,
-                        group = groupName,
-                        first = true,
-                        type = UIGroupType.Vertical,
-                        container = vertical
-                    };
-                    Debug.Log($"Adding Unmanaged Group: {groupName} to {Path}");
-                    propList.Add(element);
-                    groupBag.Add(groupName, element);
-                }
-            }
-
-            void _DrawHorizontalGroup(string parentName, string groupName, int order)
-            {
-                if (!groupBag.ContainsKey(groupName))
-                {
-                    if (!orderBag.TryGetValue(order, out var propList))
-                    {
-                        propList = new();
-                        orderBag[order] = propList;
-                    }
-                    var horizontal = new StyledHorizontalGroup();
-                    GroupedVisualElement element = new()
-                    {
-                        parent = parentName,
-                        group = groupName,
-                        first = true,
-                        type = UIGroupType.Horizontal,
-                        container = horizontal
-                    };
-                    Debug.Log($"Adding Horizontal Group: {groupName} to {Path}");
-                    propList.Add(element);
-                    groupBag.Add(groupName, element);
-                }
-            }
-
-            void _DrawVerticalGroup(string parentName, string groupName, int order)
-            {
-                if (!groupBag.ContainsKey(groupName))
-                {
-                    if (!orderBag.TryGetValue(order, out var propList))
-                    {
-                        propList = new();
-                        orderBag[order] = propList;
-                    }
-                    var vertical = new StyledVerticalGroup();
-                    vertical.name = groupName;
-                    GroupedVisualElement element = new()
-                    {
-                        parent = parentName,
-                        group = groupName,
-                        first = true,
-                        type = UIGroupType.Vertical,
-                        container = vertical
-                    };
-                    Debug.Log($"Adding Vertical Group: {groupName} to {Path}");
-                    propList.Add(element);
-                    groupBag.Add(groupName, element);
-                }
-            }
-
-            void _DrawFoldoutGroup(string parentName, string groupName, string header, int order)
-            {
-                if (!groupBag.ContainsKey(groupName))
-                {
-                    if (!orderBag.TryGetValue(order, out var propList))
-                    {
-                        propList = new();
-                        orderBag[order] = propList;
-                    }
-                    var foldout = new StyledFoldout(header);
-                    GroupedVisualElement element = new()
-                    {
-                        parent = parentName,
-                        group = groupName,
-                        first = true,
-                        type = UIGroupType.Foldout,
-                        container = foldout
-                    };
-                    Debug.Log($"Adding Foldout Group: {groupName} to {Path}");
-                    propList.Add(element);
-                    groupBag.Add(groupName, element);
-                }
-            }
-
-            void _DrawBoxGroup(string parentName, string groupName, string header, int order)
-            {
-                if (!groupBag.ContainsKey(groupName))
-                {
-                    if (!orderBag.TryGetValue(order, out var propList))
-                    {
-                        propList = new();
-                        orderBag[order] = propList;
-                    }
-                    var box = new StyledHeaderBox(header);
-                    GroupedVisualElement element = new()
-                    {
-                        parent = parentName,
-                        group = groupName,
-                        first = true,
-                        type = UIGroupType.Box,
-                        container = box
-                    };
-                    Debug.Log($"Adding Box Group: {groupName} to {Path}");
-                    propList.Add(element);
-                    groupBag.Add(groupName, element);
-                }
-            }
+            MethodInfo.Invoke(Property != null ? Property.boxedValue : Target, null);
         }
 
-        public void PopulateGroups(BaseVaporInspector inspector, Dictionary<string, GroupedVisualElement> groupBag)
-        {
-            foreach (var child in Children)
-            {
-                if (!child.IsDrawnWithVapor)
-                {
-                    if (!child.IsUnmanagedGroup)
-                    {
-                        Debug.Log($"{child.Property.propertyPath} - {child.UpdatedGroupName}");
-                        if (groupBag.TryGetValue(child.UpdatedGroupName, out var group))
-                        {
-                            switch (child.ContainingGroup.Type)
-                            {
-                                case UIGroupType.Horizontal:
-                                    _PopulateHorizontalGroup(group, child);
-                                    break;
-                                case UIGroupType.Vertical:
-                                    _PopulateVerticalGroup(group, child);
-                                    break;
-                                case UIGroupType.Foldout:
-                                    _PopulateFoldout(group, child);
-                                    break;
-                                case UIGroupType.Box:
-                                    _PopulateBox(group, child);
-                                    break;
-                                case UIGroupType.Tab:
-                                    break;
-                                case UIGroupType.Title:
-                                    break;
-                                default:
-                                    break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        if (groupBag.TryGetValue($"{child.UpdatedGroupName}-Unmanaged", out var group))
-                        {
-                            Debug.Log($"Populating Unamanged: {group.parent} - {group.group}");
-                            _PopulateVerticalGroup(group, child);
-                        }
-                    }
-                }
-                if (child.HasChildren)
-                {
-                    child.PopulateGroups(inspector, groupBag);
-                }
-            }
-
-            void _PopulateHorizontalGroup(GroupedVisualElement group, VaporDrawerInfo drawer)
-            {
-                bool isFirst = group.first;
-                group.first = false;
-                var drawn = inspector.DrawVaporPropertyWithVerticalLayout(drawer, "vapor-horizontal-prop");
-                drawn.style.flexGrow = 1;
-                drawn.style.marginLeft = isFirst ? 0 : 2;
-                group.container.Add(drawn);
-            }
-
-            void _PopulateVerticalGroup(GroupedVisualElement group, VaporDrawerInfo drawer)
-            {
-                bool formatWithVerticalLayout = false;
-                string parent = group.parent;
-                while (parent != string.Empty)
-                {
-                    var parentGroup = groupBag[parent];
-                    if (parentGroup.type == UIGroupType.Horizontal)
-                    {
-                        formatWithVerticalLayout = true;
-                    }
-                    parent = parentGroup.parent;
-                }
-
-                bool isFirst = group.first;
-                group.first = false;
-                if (formatWithVerticalLayout)
-                {
-                    var drawn = inspector.DrawVaporPropertyWithVerticalLayout(drawer, "vapor-vertical-prop");
-                    drawn.style.marginTop = 1;
-                    group.container.Add(drawn);
-                }
-                else
-                {
-                    var drawn = inspector.DrawVaporProperty(drawer, "vapor-vertical-prop");
-                    drawn.style.marginTop = 1;
-                    group.container.Add(drawn);
-                }
-            }
-
-            void _PopulateFoldout(GroupedVisualElement group, VaporDrawerInfo drawer)
-            {
-                bool isFirst = group.first;
-                group.first = false;
-                var drawn = inspector.DrawVaporProperty(drawer, "vapor-foldout-prop");
-                group.container.Add(drawn);
-            }
-
-            void _PopulateBox(GroupedVisualElement group, VaporDrawerInfo drawer)
-            {
-                bool isFirst = group.first;
-                group.first = false;
-                var drawn = inspector.DrawVaporProperty(drawer, "vapor-box-prop");
-                group.container.Add(drawn);
-            }
-        }
         #endregion
 
         #region - Attributes -
@@ -900,7 +537,7 @@ namespace VaporUIElementsEditor
 
         public bool TryGetAttribute<T>(out T attribute) where T : Attribute
         {
-            bool result = false;
+            bool result;
             switch (InfoType)
             {
                 case DrawerInfoType.Field:
@@ -917,13 +554,13 @@ namespace VaporUIElementsEditor
                     return result;
                 default:
                     attribute = null;
-                    return result;
+                    return false;
             }
         }
 
         public bool TryGetAttributes<T>(out T[] attribute) where T : Attribute
         {
-            bool result = false;
+            bool result;
             switch (InfoType)
             {
                 case DrawerInfoType.Field:
@@ -940,7 +577,7 @@ namespace VaporUIElementsEditor
                     return result;
                 default:
                     attribute = null;
-                    return result;
+                    return false;
             }
         }
         #endregion

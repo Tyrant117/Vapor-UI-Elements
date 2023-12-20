@@ -1,8 +1,10 @@
 using System;
 using UnityEngine.Assertions;
+using System.Diagnostics;
 
 namespace VaporUIElements
 {
+    [Conditional("VAPOR_INSPECTOR")]
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public class TabGroupAttribute : VaporGroupAttribute
     {

@@ -1,8 +1,9 @@
 using System;
-using UnityEngine;
+using System.Diagnostics;
 
 namespace VaporUIElements
 {
+    [Conditional("VAPOR_INSPECTOR")]
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = true)]
     public class DrawWithVaporAttribute : Attribute
     {

@@ -14,30 +14,31 @@ namespace VaporUIElementsEditor
     public abstract class BaseVaporInspector : Editor
     {
         public static readonly Func<FieldInfo, bool> FieldSearchPredicate = f => !f.IsDefined(typeof(HideInInspector))
-                                                                                 && (f.IsPublic || f.IsDefined(typeof(SerializeField)) || f.GetCustomAttribute<PropertyAttribute>() != null);
+                                                                                 && !f.IsDefined(typeof(NonSerializedAttribute))
+                                                                                 && (f.IsPublic || f.IsDefined(typeof(SerializeField)));
         public static readonly Func<MethodInfo, bool> MethodSearchPredicate = f => f.IsDefined(typeof(ButtonAttribute));
         public static readonly Func<PropertyInfo, bool> PropertySearchPredicate = f => f.IsDefined(typeof(ShowInInspectorAttribute));
 
         protected static readonly Dictionary<string, VaporGroupNode> NodeBag = new();
 
         protected readonly List<VaporDrawerInfo> SerializedDrawerInfo = new();
-        protected readonly Dictionary<string, VaporDrawerInfo> PropertyPathToDrawerMap = new();
+        // protected readonly Dictionary<string, VaporDrawerInfo> PropertyPathToDrawerMap = new();
         protected VaporGroupNode RootNode;
         protected string UnmanagedGroupName;
 
         public override VisualElement CreateInspectorGUI()
         {
-            var drawWithUnity = target.GetType().IsDefined(typeof(DrawWithUnityAttribute));
+            var drawWithVapor = target.GetType().IsDefined(typeof(DrawWithVaporAttribute));
             var inspector = new VisualElement();
             inspector.Add(DrawScript());
-            if (drawWithUnity)
-            {
-                DrawUIElementsDefaultInspector(inspector);
-            }
-            else
+            if (drawWithVapor)
             {
                 GetSerializedDrawerInfo();
                 DrawVaporInspector(inspector);
+            }
+            else
+            {
+                DrawUIElementsDefaultInspector(inspector);
             }
 
             return inspector;
@@ -153,22 +154,22 @@ namespace VaporUIElementsEditor
                     }
                     if (drawer.IsDrawnWithVapor)
                     {
-                        drawer.BuildGroups(this, "", node, NodeBag);
+                        drawer.BuildGroups(/*this,*/ "", node, NodeBag);
                     }
                     else
                     {
-                        node.AddContent(this, drawer);
+                        node.AddContent(/*this,*/ drawer);
                     }
                 }
                 else
                 {
                     if (drawer.IsDrawnWithVapor)
                     {
-                        drawer.BuildGroups(this, UnmanagedGroupName, unmanagedNode, NodeBag);
+                        drawer.BuildGroups(/*this,*/ UnmanagedGroupName, unmanagedNode, NodeBag);
                     }
                     else
                     {
-                        unmanagedNode.AddContent(this, drawer);
+                        unmanagedNode.AddContent(/*this,*/ drawer);
                     }
                 }
             }
@@ -410,13 +411,25 @@ namespace VaporUIElementsEditor
                     }
                     else
                     {
-                        var field = new PropertyField(drawer.Property)
+                        if (drawer.Property.isArray && !drawer.HasAttribute<DrawWithUnityAttribute>())
                         {
-                            name = drawerName,
-                            userData = drawer,
-                        };
-                        field.RegisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
-                        return field;
+                            var list = new StyledList(drawer)
+                            {
+                                name = drawerName,
+                                userData = drawer
+                            };
+                            return list;
+                        }
+                        else
+                        {
+                            var field = new PropertyField(drawer.Property)
+                            {
+                                name = drawerName,
+                                userData = drawer,
+                            };
+                            field.RegisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
+                            return field;
+                        }
                     }
                 case DrawerInfoType.Property:
                     object clonedTarget = drawer.Target;
@@ -530,10 +543,16 @@ namespace VaporUIElementsEditor
             {
                 list.Q<Toggle>().style.marginLeft = 3;
             }
+
             List<Action> resolvers = new();
 
-            var prop = serializedObject.FindProperty(field.bindingPath);
-            var drawer = PropertyPathToDrawerMap[field.bindingPath];
+            if (field.userData is not VaporDrawerInfo drawer)
+            {
+                return;
+            }
+
+            var prop = drawer.Property; // serializedObject.FindProperty(field.bindingPath);
+            // var drawer = PropertyPathToDrawerMap[field.bindingPath];
             if (prop.propertyType == SerializedPropertyType.Generic && !drawer.IsDrawnWithVapor)
             {
                 if (drawer.HasAttribute<InlineEditorAttribute>())
@@ -552,7 +571,7 @@ namespace VaporUIElementsEditor
             DrawerUtility.DrawDecorators(field, drawer);
             DrawerUtility.DrawLabel(field, drawer, resolvers);
             DrawerUtility.DrawLabelWidth(field, drawer);
-            DrawerUtility.DrawHideLabel(field, drawer);            
+            DrawerUtility.DrawHideLabel(field, drawer);
             DrawerUtility.DrawConditionals(field, drawer, resolvers);
             DrawerUtility.DrawReadOnly(field, drawer);
             DrawerUtility.DrawAutoReference(field, drawer);
@@ -609,6 +628,7 @@ namespace VaporUIElementsEditor
         protected void GetSerializedDrawerInfo()
         {
             SerializedDrawerInfo.Clear();
+            // PropertyPathToDrawerMap.Clear();
             List<FieldInfo> fieldInfo = new();
             List<PropertyInfo> propertyInfo = new();
             List<MethodInfo> methodInfo = new();
@@ -629,19 +649,26 @@ namespace VaporUIElementsEditor
 
             foreach (var field in fieldInfo.Where(FieldSearchPredicate))
             {
-                SerializedProperty property = serializedObject.FindProperty(field.Name);
-                var info = new VaporDrawerInfo(property.propertyPath, field, property, target, null, PropertyPathToDrawerMap);
+                var property = serializedObject.FindProperty(field.Name);
+                if (property == null)
+                {
+                    continue;
+                }
+
+                var info = new VaporDrawerInfo(property.propertyPath, field, property, target, null);
+                // var info = new VaporDrawerInfo(property.propertyPath, field, property, target, null, PropertyPathToDrawerMap);
                 SerializedDrawerInfo.Add(info);
-                PropertyPathToDrawerMap.Add(property.propertyPath, info);
+                // PropertyPathToDrawerMap.Add(property.propertyPath, info);
             }
+
             foreach (var property in propertyInfo.Where(PropertySearchPredicate))
             {
-                var info = new VaporDrawerInfo($"{target.name}_p_{property.Name}", property, target, null, PropertyPathToDrawerMap);
+                var info = new VaporDrawerInfo($"{target.name}_p_{property.Name}", property, target, null);
                 SerializedDrawerInfo.Add(info);
             }
             foreach (var method in methodInfo.Where(MethodSearchPredicate))
             {
-                var info = new VaporDrawerInfo(method.Name, method, target, null, PropertyPathToDrawerMap);
+                var info = new VaporDrawerInfo(method.Name, method, target, null);
                 SerializedDrawerInfo.Add(info);
             }
 

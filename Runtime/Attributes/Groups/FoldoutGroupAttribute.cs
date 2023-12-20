@@ -1,8 +1,10 @@
 using System;
+using System.Diagnostics;
 using UnityEngine.Assertions;
 
 namespace VaporUIElements
 {
+    [Conditional("VAPOR_INSPECTOR")]
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public class FoldoutGroupAttribute : VaporGroupAttribute
     {

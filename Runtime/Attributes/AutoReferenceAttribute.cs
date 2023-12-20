@@ -1,9 +1,11 @@
-using System.Collections;
-using System.Collections.Generic;
+using System;
+using System.Diagnostics;
 using UnityEngine;
 
 namespace VaporUIElements
 {
+    [Conditional("VAPOR_INSPECTOR")]
+    [AttributeUsage(AttributeTargets.Field, Inherited = true, AllowMultiple = true)]
     public class AutoReferenceAttribute : PropertyAttribute
     {
         public bool SearchChildren { get; }

@@ -7,11 +7,311 @@ using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VaporUIElements;
+using FilePathAttribute = VaporUIElements.FilePathAttribute;
+using Object = UnityEngine.Object;
 
 namespace VaporUIElementsEditor
 {
     public static class DrawerUtility
     {
+        #region Property Drawers
+        public static VisualElement DrawVaporElementWithVerticalLayout(VaporDrawerInfo drawer, string drawerName)
+        {
+            var vertical = new StyledVerticalGroup(0, 0, true);
+            var field = DrawVaporElement(drawer, drawerName);
+            vertical.Add(field);
+            return vertical;
+        }
+
+        public static VisualElement DrawVaporElement(VaporDrawerInfo drawer, string drawerName)
+        {
+            switch (drawer.InfoType)
+            {
+                case DrawerInfoType.Field:
+                    if (drawer.TryGetAttribute<ValueDropdownAttribute>(out var dropdownAtr))
+                    {
+                        return DrawVaporValueDropdown(drawer, drawerName, dropdownAtr);
+                    }
+
+                    if (drawer.Property.isArray && !drawer.HasAttribute<DrawWithUnityAttribute>())
+                    {
+                        return DrawVaporList(drawer, drawerName);
+                    }
+
+                    return DrawVaporField(drawer, drawerName);
+                case DrawerInfoType.Property:
+                    return DrawVaporProperty(drawer, drawerName);
+                case DrawerInfoType.Method:
+                    return DrawVaporMethod(drawer);
+                default:
+                    return null;
+            }
+        }
+
+        private static VisualElement DrawVaporValueDropdown(VaporDrawerInfo drawer, string drawerName, ValueDropdownAttribute dropdownAtr)
+        {
+            var container = new VisualElement()
+            {
+                name = drawerName,
+                userData = drawer
+            };
+            List<string> keys = new();
+            List<object> values = new();
+            switch (dropdownAtr.ResolverType)
+            {
+                case ResolverType.None:
+                    break;
+                case ResolverType.Property:
+                    var pi = ReflectionUtility.GetProperty(drawer.Target, dropdownAtr.Resolver[1..]);
+                    _ConvertToTupleList(keys, values, (IList)pi.GetValue(drawer.Target));
+                    break;
+                case ResolverType.Method:
+                    var mi = ReflectionUtility.GetMethod(drawer.Target, dropdownAtr.Resolver[1..]);
+                    _ConvertToTupleList(keys, values, (IList)mi.Invoke(drawer.Target, null));
+                    break;
+            }
+            var index = 0;
+            foreach (var value in values)
+            {
+                if (value.Equals(drawer.Property.boxedValue))
+                {
+                    break;
+                }
+                index++;
+            }
+
+            var field = new DropdownField(drawer.Property.displayName, keys, index)
+            {
+                userData = values
+            };
+            field.AddToClassList("unity-base-field__aligned");
+            field.RegisterValueChangedCallback(OnDropdownChanged);
+            container.Add(field);
+            return container;
+            
+            static void _ConvertToTupleList(List<string> keys, List<object> values, IList convert)
+            {
+                foreach (var obj in convert)
+                {
+                    var item1 = (string)obj.GetType().GetField("Item1", BindingFlags.Instance | BindingFlags.Public)
+                        ?.GetValue(obj);
+                    var item2 = obj.GetType().GetField("Item2", BindingFlags.Instance | BindingFlags.Public)
+                        ?.GetValue(obj);
+                    if (item1 == null || item2 == null)
+                    {
+                        continue;
+                    }
+
+                    keys.Add(item1);
+                    values.Add(item2);
+                }
+            }
+        }
+
+        private static VisualElement DrawVaporList(VaporDrawerInfo drawer, string drawerName)
+        {
+            var list = new StyledList(drawer)
+            {
+                name = drawerName,
+                userData = drawer
+            };
+            return list;
+        }
+
+        private static VisualElement DrawVaporField(VaporDrawerInfo drawer, string drawerName)
+        {
+            var field = new PropertyField(drawer.Property)
+            {
+                name = drawerName,
+                userData = drawer,
+            };
+            field.RegisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
+            return field;
+        }
+
+        private static VisualElement DrawVaporProperty(VaporDrawerInfo drawer, string drawerName)
+        {
+            var clonedTarget = drawer.Target;
+            var cleanupImmediate = false;
+            if (drawer.Target.GetType().IsSubclassOf(typeof(Component)))
+            {
+                clonedTarget = Object.Instantiate((Component)drawer.Target);
+                cleanupImmediate = true;
+            }
+            else
+            {
+                clonedTarget = Activator.CreateInstance(clonedTarget.GetType());
+            }
+            var val = drawer.PropertyInfo.GetValue(clonedTarget).ToString();
+            if (drawer.FieldInfo != null)
+            {
+                val = drawer.FieldInfo.GetValue(clonedTarget).ToString();
+            }
+            var prop = new TextField(drawer.Path[(drawer.Path.IndexOf("p_", StringComparison.Ordinal) + 2)..])
+            {
+                name = drawerName,
+            };
+            prop.SetValueWithoutNotify(val);
+            prop.SetEnabled(false);
+            if (cleanupImmediate)
+            {
+                var obj = (Component)clonedTarget;
+                Object.DestroyImmediate(obj.gameObject);
+            }
+            if (drawer.TryGetAttribute<ShowInInspectorAttribute>(out var showAtr))
+            {
+                if (showAtr.Dynamic)
+                {
+                    prop.schedule.Execute(() => OnDynamicPropertyShow(drawer, prop)).Every(showAtr.DynamicInterval);
+                }
+            }
+            return prop;
+        }
+
+        private static VisualElement DrawVaporMethod(VaporDrawerInfo drawer)
+        {
+            var atr = drawer.MethodInfo.GetCustomAttribute<ButtonAttribute>();
+            var label = atr.Label;
+            if (string.IsNullOrEmpty(label))
+            {
+                label = ObjectNames.NicifyVariableName(drawer.MethodInfo.Name);
+            }
+
+            var button = new StyledButton(atr.Size)
+            {
+                name = drawer.Path,
+                text = label,
+                userData = drawer
+            };
+            button.RegisterCallback<GeometryChangedEvent>(OnMethodBuilt);
+            return button;
+        }
+
+        private static void OnDropdownChanged(ChangeEvent<string> evt)
+        {
+            if (evt.target is DropdownField dropdown && dropdown.parent.userData is VaporDrawerInfo drawer && dropdown.userData is List<object> values)
+            {
+                var newVal = values[dropdown.index];
+                drawer.Property.boxedValue = newVal;
+                drawer.Property.serializedObject.ApplyModifiedProperties();
+            }
+        }
+
+        private static void OnDynamicPropertyShow(VaporDrawerInfo drawer, TextField field)
+        {
+            var clonedTarget = drawer.Target;
+            var cleanupImmediate = false;
+            if (drawer.Target.GetType().IsSubclassOf(typeof(Component)))
+            {
+                clonedTarget = Object.Instantiate((Component)drawer.Target);
+                cleanupImmediate = true;
+            }
+            else
+            {
+                clonedTarget = Activator.CreateInstance(clonedTarget.GetType());
+            }
+            var val = drawer.PropertyInfo.GetValue(clonedTarget).ToString();
+            if (drawer.FieldInfo != null)
+            {
+                val = drawer.FieldInfo.GetValue(clonedTarget).ToString();
+            }
+            field.SetValueWithoutNotify(val);
+            if (!cleanupImmediate) return;
+            
+            var obj = (Component)clonedTarget;
+            Object.DestroyImmediate(obj.gameObject);
+        }
+        #endregion
+
+        private static void OnPropertyBuilt(GeometryChangedEvent evt)
+        {
+            var field = (PropertyField)evt.target;
+            if (field is not { childCount: > 0 }) return;
+            
+            field.UnregisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
+            OnPropertyBuilt(field);
+        }
+
+        private static void OnMethodBuilt(GeometryChangedEvent evt)
+        {
+            var button = (StyledButton)evt.target;
+            if (button == null) return;
+            
+            button.UnregisterCallback<GeometryChangedEvent>(OnMethodBuilt);
+            OnMethodBuilt(button);
+        }
+        
+        public static void OnPropertyBuilt(PropertyField field)
+        {
+            var list = field.Q<ListView>();
+            if (list != null)
+            {
+                list.Q<Toggle>().style.marginLeft = 3;
+            }
+            List<Action> resolvers = new();
+
+            // Debug.Log(field.name);
+            if (field.userData is not VaporDrawerInfo drawer)
+            {
+                return;
+            }
+            
+            var prop = drawer.Property;
+            if (prop.propertyType == SerializedPropertyType.Generic && !drawer.IsDrawnWithVapor)
+            {
+                if (drawer.HasAttribute<InlineEditorAttribute>())
+                {
+                    field.Q<Toggle>().RemoveFromHierarchy();
+                    var inlineContent = field.Q<VisualElement>("unity-content");
+                    inlineContent.style.display = DisplayStyle.Flex;
+                    inlineContent.style.marginLeft = 0;
+                }
+                else
+                {
+                    field.Q<Toggle>().style.marginLeft = 0;
+                }
+            }
+
+            DrawDecorators(field, drawer);
+            DrawLabel(field, drawer, resolvers);
+            DrawLabelWidth(field, drawer);
+            DrawHideLabel(field, drawer);            
+            DrawConditionals(field, drawer, resolvers);
+            DrawReadOnly(field, drawer);
+            DrawAutoReference(field, drawer);
+            DrawTitle(field, drawer);
+            DrawPathSelection(field, drawer);
+            DrawInlineButtons(field, drawer, resolvers);
+            DrawSuffix(field, drawer);
+
+            // Validation
+            DrawValidation(field, drawer, resolvers);
+
+            if (resolvers.Count > 0)
+            {
+                field.schedule.Execute(() => Resolve(resolvers)).Every(1000);
+            }
+        }
+
+        public static void OnMethodBuilt(StyledButton button)
+        {
+            if (button.userData is not VaporDrawerInfo drawer)
+            {
+                return;
+            }
+
+            button.clickable = new Clickable(() => drawer.InvokeMethod());
+        }
+
+        private static void Resolve(List<Action> resolvers)
+        {
+            foreach (var item in resolvers)
+            {
+                item.Invoke();
+            }
+        }
+
+        #region Attribute Drawers
         public static void DrawLabel(PropertyField field, VaporDrawerInfo drawer, List<Action> resolvers)
         {
             if (drawer.TryGetAttribute<LabelAttribute>(out var atr))
@@ -294,7 +594,7 @@ namespace VaporUIElementsEditor
 
         public static void DrawPathSelection(PropertyField field, VaporDrawerInfo drawer)
         {
-            if (drawer.TryGetAttribute<VaporUIElements.FilePathAttribute>(out var fileAtr) && field[0] is TextField filePathTextField)
+            if (drawer.TryGetAttribute<FilePathAttribute>(out var fileAtr) && field[0] is TextField filePathTextField)
             {
                 var inlineButton = new Button(() => filePathTextField.value = _FormatFilePath(fileAtr.AbsolutePath, fileAtr.FileExtension))
                 {
@@ -561,5 +861,7 @@ namespace VaporUIElementsEditor
                 };
             }
         }
+
+        #endregion
     }
 }

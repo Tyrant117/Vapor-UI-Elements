@@ -2,7 +2,7 @@ using UnityEngine.UIElements;
 
 namespace VaporUIElements
 {
-    public class StyledTitleGroup : VisualElement
+    public class StyledTitleGroup : VisualElement, ILabeledGroup
     {
         public Label Label { get; private set; }
 

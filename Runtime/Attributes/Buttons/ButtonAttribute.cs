@@ -1,7 +1,9 @@
 using System;
+using System.Diagnostics;
 
 namespace VaporUIElements
 {
+    [Conditional("VAPOR_INSPECTOR")]
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true, Inherited = true)]
     public class ButtonAttribute : Attribute
     {

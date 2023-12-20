@@ -56,7 +56,7 @@ namespace VaporUIElementsEditor
             Children.Add(childNode);
         }
 
-        public void AddContent(BaseVaporInspector inspector, VaporDrawerInfo info)
+        public void AddContent(/*BaseVaporInspector inspector, */VaporDrawerInfo info)
         {
             VisualElement ve = null;
             switch (GroupType)
@@ -79,25 +79,21 @@ namespace VaporUIElementsEditor
                 case UIGroupType.Title:
                     ve = _PopulateTitleGroup(info);
                     break;
-                default:
-                    break;
             }
             ContainerContent.Add(new(info.UpdatedOrder, ve));
-            //Content.Add(info);
 
             VisualElement _PopulateHorizontalGroup(VaporDrawerInfo drawer)
             {
                 bool isFirst = ContainerContent.Count == 0;
-                var drawn = inspector.DrawVaporPropertyWithVerticalLayout(drawer, drawer.Path);
+                var drawn = DrawerUtility.DrawVaporElementWithVerticalLayout(drawer, drawer.Path);
                 drawn.style.flexGrow = 1;
                 drawn.style.marginLeft = isFirst ? 0 : 2;
                 return drawn;
-                //Container.Add(drawn);
             }
 
             VisualElement _PopulateVerticalGroup(VaporDrawerInfo drawer)
             {
-                bool formatWithVerticalLayout = false;
+                var formatWithVerticalLayout = false;
                 var parentNode = Parent;
                 while (parentNode != null)
                 {
@@ -110,53 +106,47 @@ namespace VaporUIElementsEditor
                     parentNode = parentNode.Parent;
                 }
 
-                bool isFirst = ContainerContent.Count == 0;
+                // var isFirst = ContainerContent.Count == 0;
                 if (formatWithVerticalLayout)
                 {
-                    var drawn = inspector.DrawVaporPropertyWithVerticalLayout(drawer, drawer.Path);
+                    var drawn = DrawerUtility.DrawVaporElementWithVerticalLayout(drawer, drawer.Path);
                     drawn.style.marginTop = 1;
                     return drawn;
-                    //Container.Add(drawn);
                 }
                 else
                 {
-                    var drawn = inspector.DrawVaporProperty(drawer, drawer.Path);
+                    var drawn = DrawerUtility.DrawVaporElement(drawer, drawer.Path);
                     drawn.style.marginTop = 1;
                     return drawn;
-                    //Container.Add(drawn);
                 }
             }
 
             VisualElement _PopulateFoldout(VaporDrawerInfo drawer)
             {
-                bool isFirst = ContainerContent.Count == 0;
-                var drawn = inspector.DrawVaporProperty(drawer, drawer.Path);
+                // var isFirst = ContainerContent.Count == 0;
+                var drawn = DrawerUtility.DrawVaporElement(drawer, drawer.Path);
                 return drawn;
-                //Container.Add(drawn);
             }
 
             VisualElement _PopulateBox(VaporDrawerInfo drawer)
             {
-                bool isFirst = ContainerContent.Count == 0;
-                var drawn = inspector.DrawVaporProperty(drawer, drawer.Path);
+                // var isFirst = ContainerContent.Count == 0;
+                var drawn = DrawerUtility.DrawVaporElement(drawer, drawer.Path);
                 return drawn;
-                //Container.Add(drawn);
             }
 
             VisualElement _PopulateTabGroup(VaporDrawerInfo drawer)
             {
-                bool isFirst = ContainerContent.Count == 0;
-                var drawn = inspector.DrawVaporProperty(drawer, drawer.Path);
+                // var isFirst = ContainerContent.Count == 0;
+                var drawn = DrawerUtility.DrawVaporElement(drawer, drawer.Path);
                 return drawn;
-                //Container.Add(drawn);
             }
 
             VisualElement _PopulateTitleGroup(VaporDrawerInfo drawer)
             {
-                bool isFirst = ContainerContent.Count == 0;
-                var drawn = inspector.DrawVaporProperty(drawer, drawer.Path);
+                // var isFirst = ContainerContent.Count == 0;
+                var drawn = DrawerUtility.DrawVaporElement(drawer, drawer.Path);
                 return drawn;
-                //Container.Add(drawn);
             }
         }
 
