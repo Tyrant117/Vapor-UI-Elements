@@ -28,18 +28,20 @@ namespace VaporUIElementsEditor
 
         public override VisualElement CreateInspectorGUI()
         {
-            var drawWithVapor = target.GetType().IsDefined(typeof(DrawWithVaporAttribute));
+            // var drawWithVapor = target.GetType().IsDefined(typeof(DrawWithVaporAttribute));
             var inspector = new VisualElement();
             inspector.Add(DrawScript());
-            if (drawWithVapor)
-            {
-                GetSerializedDrawerInfo();
-                DrawVaporInspector(inspector);
-            }
-            else
-            {
-                DrawUIElementsDefaultInspector(inspector);
-            }
+            GetSerializedDrawerInfo();
+            DrawVaporInspector(inspector);
+            // if (drawWithVapor)
+            // {
+            //     GetSerializedDrawerInfo();
+            //     DrawVaporInspector(inspector);
+            // }
+            // else
+            // {
+            //     DrawUIElementsDefaultInspector(inspector);
+            // }
 
             return inspector;
         }
