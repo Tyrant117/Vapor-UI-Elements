@@ -35,6 +35,7 @@ namespace VaporUIElementsEditor
         public bool HasChildren { get; }
         public bool HasUnmanagedChildren { get; }
         public bool IsDrawnWithVapor { get; }
+        public bool IsUnityObject { get; }
 
         public List<VaporGroupAttribute> Groups { get; } = new();
         public VaporGroupAttribute ContainingGroup { get; }
@@ -55,7 +56,8 @@ namespace VaporUIElementsEditor
             Property = property;
             Parent = parentDrawer;
             HasParent = parentDrawer != null;
-            IsDrawnWithVapor = FieldInfo.FieldType.IsDefined(typeof(DrawWithVaporAttribute)) && !FieldInfo.FieldType.IsSubclassOf(typeof(Object));
+            IsUnityObject = FieldInfo.FieldType.IsSubclassOf(typeof(Object));
+            IsDrawnWithVapor = FieldInfo.FieldType.IsDefined(typeof(DrawWithVaporAttribute)) && !IsUnityObject;
             Target = target; 
 
             if (TryGetAttributes<VaporGroupAttribute>(out var attributes))

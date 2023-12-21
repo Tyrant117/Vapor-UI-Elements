@@ -132,6 +132,49 @@ namespace VaporUIElementsEditor
                 name = drawerName,
                 userData = drawer,
             };
+            if (drawer.IsUnityObject)
+            {
+                field.AddManipulator(new ContextualMenuManipulator(evt =>
+                {
+                    evt.menu.AppendAction("Set To Null", ca =>
+                    {
+                        drawer.Property.boxedValue = null;
+                        drawer.Property.serializedObject.ApplyModifiedProperties();
+                    });
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Copy", _ => { ClipboardUtility.WriteToBuffer(drawer); });
+                    evt.menu.AppendAction("Paste", _ => { ClipboardUtility.ReadFromBuffer(drawer); }, _ =>
+                    {
+                        var read = ClipboardUtility.CanReadFromBuffer(drawer);
+                        return read ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled;
+                    }, drawer);
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Copy Property Path", _ => { EditorGUIUtility.systemCopyBuffer = drawer.FieldInfo.Name; });
+                }));
+            }
+            else
+            {
+                field.AddManipulator(new ContextualMenuManipulator(evt =>
+                {
+                    evt.menu.AppendAction("Reset", ca =>
+                    {
+                        var clonedTarget = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(drawer.Target.GetType());
+                        var val = drawer.FieldInfo.GetValue(clonedTarget);
+                        drawer.Property.boxedValue = val;
+                        drawer.Property.serializedObject.ApplyModifiedProperties();
+                    });
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Copy", _ => { ClipboardUtility.WriteToBuffer(drawer); });
+                    evt.menu.AppendAction("Paste", _ => { ClipboardUtility.ReadFromBuffer(drawer); }, _ =>
+                    {
+                        var read = ClipboardUtility.CanReadFromBuffer(drawer);
+                        return read ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled;
+                    }, drawer);
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Copy Property Path", _ => { EditorGUIUtility.systemCopyBuffer = drawer.FieldInfo.Name; });
+                }));
+            }
+
             field.RegisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
             return field;
         }
@@ -139,26 +182,30 @@ namespace VaporUIElementsEditor
         private static VisualElement DrawVaporProperty(VaporDrawerInfo drawer, string drawerName)
         {
             var clonedTarget = drawer.Target;
-            var cleanupImmediate = false;
-            if (drawer.Target.GetType().IsSubclassOf(typeof(Component)))
-            {
-                clonedTarget = Object.Instantiate((Component)drawer.Target);
-                cleanupImmediate = true;
-            }
-            else
-            {
-                clonedTarget = Activator.CreateInstance(clonedTarget.GetType());
-            }
+            // var cleanupImmediate = false;
+            clonedTarget = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(clonedTarget.GetType());
+            // if (drawer.Target.GetType().IsSubclassOf(typeof(Component)))
+            // {
+            //     // clonedTarget = Object.Instantiate((Component)drawer.Target);
+            //     // cleanupImmediate = true;
+            // }
+            // else
+            // {
+            //     clonedTarget = System.Runtime.Serialization.FormatterServices.GetUninitializedObject(clonedTarget.GetType());
+            //     // clonedTarget = Activator.CreateInstance(clonedTarget.GetType());
+            // }
             var val = drawer.PropertyInfo.GetValue(clonedTarget).ToString();
             if (drawer.FieldInfo != null)
             {
                 val = drawer.FieldInfo.GetValue(clonedTarget).ToString();
             }
+
             var tooltip = "";
             if (drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr))
             {
                 tooltip = rtAtr.Tooltip;
             }
+
             var prop = new TextField(drawer.Path[(drawer.Path.IndexOf("p_", StringComparison.Ordinal) + 2)..])
             {
                 name = drawerName,
@@ -166,11 +213,11 @@ namespace VaporUIElementsEditor
             prop.Q<Label>().tooltip = tooltip;
             prop.SetValueWithoutNotify(val);
             prop.SetEnabled(false);
-            if (cleanupImmediate)
-            {
-                var obj = (Component)clonedTarget;
-                Object.DestroyImmediate(obj.gameObject);
-            }
+            // if (cleanupImmediate)
+            // {
+            //     var obj = (Component)clonedTarget;
+            //     Object.DestroyImmediate(obj.gameObject);
+            // }
             if (drawer.TryGetAttribute<ShowInInspectorAttribute>(out var showAtr))
             {
                 if (showAtr.Dynamic)
@@ -178,6 +225,7 @@ namespace VaporUIElementsEditor
                     prop.schedule.Execute(() => OnDynamicPropertyShow(drawer, prop)).Every(showAtr.DynamicInterval);
                 }
             }
+
             return prop;
         }
 
@@ -290,6 +338,25 @@ namespace VaporUIElementsEditor
                     field.Q<Toggle>().style.marginLeft = 0;
                 }
             }
+
+            // field.Q<Label>().AddManipulator(new ContextualMenuManipulator(@event =>
+            // {
+            //     Debug.Log("Fired");
+            //     @event.menu.AppendAction("Set To Null", ca =>
+            //     {
+            //         drawer.Property.boxedValue = null;
+            //         drawer.Property.serializedObject.ApplyModifiedProperties();
+            //     });
+            // }));
+            // field.Q<Label>().RegisterCallback<ContextualMenuPopulateEvent>(evt =>
+            // {
+            //     Debug.Log("Fired");
+            //     evt.menu.AppendAction("Set To Null", ca =>
+            //     {
+            //         drawer.Property.boxedValue = null;
+            //         drawer.Property.serializedObject.ApplyModifiedProperties();
+            //     });
+            // }, TrickleDown.TrickleDown);
 
             DrawDecorators(field, drawer);
             DrawLabel(field, drawer, resolvers);

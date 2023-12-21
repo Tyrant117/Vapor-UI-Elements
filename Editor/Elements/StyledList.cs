@@ -1,3 +1,5 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using UnityEditor;
@@ -5,7 +7,7 @@ using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
 using VaporUIElements;
-using VisualElementExtensions = VaporUIElements.VisualElementExtensions;
+using Object = UnityEngine.Object;
 
 namespace VaporUIElementsEditor
 {
@@ -113,16 +115,24 @@ namespace VaporUIElementsEditor
             Label.style.textOverflow = TextOverflow.Ellipsis;
 
             // tog.Add(new ToolbarSearchField());
-            var sizeVal = new IntegerField()
+            var sizeVal = new ValidatedIntegerField()
             {
                 style =
                 {
                     minWidth = 51,
                     marginRight = 2,
                     marginTop = 2,
-                }
+                },
+                isDelayed = true,
             };
             sizeVal.BindProperty(ArrayProperty);
+            sizeVal.ValidateInput += newVal => newVal >= 0;
+            sizeVal.RegisterValueChangedCallback(evt =>
+            {
+                var target = evt.target as IntegerField;
+                if (evt.newValue >= 0) return;
+                target.value = 0;
+            });
             var valText = sizeVal[0][0];
             valText.style.marginLeft = 0;
             valText.style.paddingLeft = 2;
@@ -254,17 +264,136 @@ namespace VaporUIElementsEditor
             }
             else
             {
-                var pe = new PropertyField()
+                var pf = new PropertyField()
                 {
+                    userData = Drawer.Property.serializedObject,
                     style =
                     {
                         flexGrow = 1,
                         marginRight = 3,
                     }
                 };
-                be.Add(pe);
+                pf.AddManipulator(new ContextualMenuManipulator(evt =>
+                {
+                    // Debug.Log(drawer.Path);
+                    evt.menu.AppendAction("Set To Null", action =>
+                    {
+                        var data = action.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return;
+                        }
+
+                        prop.boxedValue = null;
+                        prop.serializedObject.ApplyModifiedProperties();
+                    }, _ => ElementType.IsSubclassOf(typeof(Object)) ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Hidden, pf);
+                    evt.menu.AppendAction("Reset", action =>
+                    {
+                        var data = action.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return;
+                        }
+
+                        var val = Activator.CreateInstance(ElementType.AsType());
+                        prop.boxedValue = val;
+                        prop.serializedObject.ApplyModifiedProperties();
+                    }, _ => !ElementType.IsSubclassOf(typeof(Object)) ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Hidden, pf);
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Copy", action =>
+                    {
+                        var data = action.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return;
+                        }
+
+                        ClipboardUtility.WriteToBuffer(prop.boxedValue);
+                    }, _ => DropdownMenuAction.Status.Normal, pf);
+                    evt.menu.AppendAction("Paste", action =>
+                    {
+                        var data = action.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return;
+                        }
+
+                        ClipboardUtility.ReadFromBuffer(prop, ElementType.AsType());
+                    }, actionStatus =>
+                    {
+                        var data = actionStatus.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return DropdownMenuAction.Status.Hidden;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return DropdownMenuAction.Status.Hidden;
+                        }
+
+                        var read = ClipboardUtility.CanReadFromBuffer(ElementType.AsType());
+                        return read ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled;
+                    }, pf);
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Copy Binding Path", action =>
+                    {
+                        var data = action.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return;
+                        }
+
+                        EditorGUIUtility.systemCopyBuffer = data.bindingPath;
+                    }, _ => DropdownMenuAction.Status.Normal, pf);
+                    evt.menu.AppendSeparator();
+                    evt.menu.AppendAction("Duplicate Array Element", action =>
+                    {
+                        var data = action.userData as PropertyField;
+                        if (data.userData is not SerializedObject so) return;
+
+                        var prop = so.FindProperty(data.bindingPath);
+                        if (prop == null)
+                        {
+                            return;
+                        }
+
+                        int matchIndex = -1;
+                        for (int i = 0; i < ArrayProperty.intValue; i++)
+                        {
+                            var path = GetPropertyAtIndex(i).propertyPath;
+                            // Debug.Log(path);
+                            if (path != prop.propertyPath) continue;
+                            
+                            matchIndex = i;
+                            break;
+                        }
+                        // Debug.Log(matchIndex);
+                        if (matchIndex == -1)
+                        {
+                            return;
+                        }
+                        Drawer.Property.InsertArrayElementAtIndex(matchIndex);
+                        Drawer.Property.serializedObject.ApplyModifiedProperties();
+                    }, _ => DropdownMenuAction.Status.Normal, pf);
+                }));
+
+                be.Add(pf);
             }
-            
+
             var del = new Button()
             {
                 name = "styled-list-element-button__delete",

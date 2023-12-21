@@ -5,7 +5,7 @@ using UnityEngine;
 namespace VaporUIElements
 {
     [Conditional("VAPOR_INSPECTOR")]
-    [AttributeUsage(AttributeTargets.Field)]
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Method)]
     public class RichTextTooltipAttribute : PropertyAttribute
     {
         public string Tooltip { get; }
