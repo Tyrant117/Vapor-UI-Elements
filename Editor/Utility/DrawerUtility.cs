@@ -15,6 +15,7 @@ namespace VaporUIElementsEditor
     public static class DrawerUtility
     {
         #region Property Drawers
+
         public static VisualElement DrawVaporElementWithVerticalLayout(VaporDrawerInfo drawer, string drawerName)
         {
             var vertical = new StyledVerticalGroup(0, 0, true);
@@ -50,11 +51,6 @@ namespace VaporUIElementsEditor
 
         private static VisualElement DrawVaporValueDropdown(VaporDrawerInfo drawer, string drawerName, ValueDropdownAttribute dropdownAtr)
         {
-            var container = new VisualElement()
-            {
-                name = drawerName,
-                userData = drawer
-            };
             List<string> keys = new();
             List<object> values = new();
             switch (dropdownAtr.ResolverType)
@@ -62,40 +58,79 @@ namespace VaporUIElementsEditor
                 case ResolverType.None:
                     break;
                 case ResolverType.Property:
-                    var pi = ReflectionUtility.GetProperty(drawer.Target, dropdownAtr.Resolver[1..]);
-                    _ConvertToTupleList(keys, values, (IList)pi.GetValue(drawer.Target));
+                    if (dropdownAtr.AssemblyQualifiedType != null)
+                    {
+                        _ConvertToTupleList(keys, values, _GetKeysProperty(dropdownAtr.AssemblyQualifiedType, dropdownAtr.Resolver[1..]));
+                    }
+                    else
+                    {
+                        var pi = ReflectionUtility.GetProperty(drawer.Target, dropdownAtr.Resolver[1..]);
+                        _ConvertToTupleList(keys, values, (IList)pi.GetValue(drawer.Target));
+                    }
+
                     break;
                 case ResolverType.Method:
-                    var mi = ReflectionUtility.GetMethod(drawer.Target, dropdownAtr.Resolver[1..]);
-                    _ConvertToTupleList(keys, values, (IList)mi.Invoke(drawer.Target, null));
-                    break;
-            }
-            var index = 0;
-            foreach (var value in values)
-            {
-                if (value.Equals(drawer.Property.boxedValue))
-                {
-                    break;
-                }
-                index++;
-            }
+                    if (dropdownAtr.AssemblyQualifiedType != null)
+                    {
+                        _ConvertToTupleList(keys, values, _GetKeysMethod(dropdownAtr.AssemblyQualifiedType, dropdownAtr.Resolver[1..]));
+                    }
+                    else
+                    {
+                        var mi = ReflectionUtility.GetMethod(drawer.Target, dropdownAtr.Resolver[1..]);
+                        _ConvertToTupleList(keys, values, (IList)mi.Invoke(drawer.Target, null));
+                    }
 
+                    break;
+                case ResolverType.Field:
+                    if (dropdownAtr.AssemblyQualifiedType != null)
+                    {
+                        _ConvertToTupleList(keys, values, _GetKeysField(dropdownAtr.AssemblyQualifiedType, dropdownAtr.Resolver[1..]));
+                    }
+                    else
+                    {
+                        var fi = ReflectionUtility.GetField(drawer.Target, dropdownAtr.Resolver[1..]);
+                        _ConvertToTupleList(keys, values, (IList)fi.GetValue(drawer.Target));
+                    }
+
+                    break;
+            }
+            
             var tooltip = "";
             if (drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr))
             {
                 tooltip = rtAtr.Tooltip;
             }
 
-            var field = new DropdownField(drawer.Property.displayName, keys, index)
+            if (dropdownAtr.Searchable)
             {
-                tooltip = tooltip,
-                userData = values
-            };
-            field.AddToClassList("unity-base-field__aligned");
-            field.RegisterValueChangedCallback(OnDropdownChanged);
-            container.Add(field);
-            return container;
-            
+                var field = new SearchableDropdown<object>(drawer.Property.displayName, drawer.Property.boxedValue)
+                {
+                    name = drawerName,
+                    userData = drawer,
+                    tooltip = tooltip,
+                };
+                field.SetChoices(values);
+                return field;
+            }
+            else
+            {
+                var container = new VisualElement()
+                {
+                    name = drawerName,
+                    userData = drawer
+                };
+                var index = values.IndexOf(drawer.Property.boxedValue);
+                var field = new DropdownField(drawer.Property.displayName, keys, index)
+                {
+                    tooltip = tooltip,
+                    userData = values
+                };
+                field.AddToClassList("unity-base-field__aligned");
+                field.RegisterValueChangedCallback(OnDropdownChanged);
+                container.Add(field);
+                return container;
+            }
+
             static void _ConvertToTupleList(List<string> keys, List<object> values, IList convert)
             {
                 foreach (var obj in convert)
@@ -113,7 +148,89 @@ namespace VaporUIElementsEditor
                     values.Add(item2);
                 }
             }
+
+            static IList _GetKeysProperty(Type type, string valuesName)
+            {
+                var propertyInfo = type.GetProperty(valuesName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (propertyInfo == null)
+                {
+                    var allTypes = ReflectionUtility.GetSelfAndBaseTypes(type);
+                    foreach (var t in allTypes)
+                    {
+                        propertyInfo = t.GetProperty(valuesName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                        if (propertyInfo != null)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (propertyInfo == null) return null;
+
+                var keys = propertyInfo.GetValue(null);
+                if (keys is IList keyList)
+                {
+                    return keyList;
+                }
+
+                return null;
+            }
+
+            static IList _GetKeysMethod(Type type, string valuesName)
+            {
+                var methodInfo = type.GetMethod(valuesName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (methodInfo == null)
+                {
+                    var allTypes = ReflectionUtility.GetSelfAndBaseTypes(type);
+                    foreach (var t in allTypes)
+                    {
+                        methodInfo = t.GetMethod(valuesName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                        if (methodInfo != null)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (methodInfo == null) return null;
+
+                var keys = methodInfo.Invoke(null, null);
+                if (keys is IList keyList)
+                {
+                    return keyList;
+                }
+
+                return null;
+            }
+
+            static IList _GetKeysField(Type type, string valuesName)
+            {
+                var fieldInfo = type.GetField(valuesName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                if (fieldInfo == null)
+                {
+                    var allTypes = ReflectionUtility.GetSelfAndBaseTypes(type);
+                    foreach (var t in allTypes)
+                    {
+                        fieldInfo = t.GetField(valuesName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                        if (fieldInfo != null)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (fieldInfo == null) return null;
+
+                var keys = fieldInfo.GetValue(null);
+                if (keys is IList keyList)
+                {
+                    return keyList;
+                }
+
+                return null;
+            }
         }
+
 
         private static VisualElement DrawVaporList(VaporDrawerInfo drawer, string drawerName)
         {
@@ -243,6 +360,7 @@ namespace VaporUIElementsEditor
             {
                 tooltip = rtAtr.Tooltip;
             }
+
             var button = new StyledButton(atr.Size)
             {
                 tooltip = tooltip,
@@ -277,24 +395,27 @@ namespace VaporUIElementsEditor
             {
                 clonedTarget = Activator.CreateInstance(clonedTarget.GetType());
             }
+
             var val = drawer.PropertyInfo.GetValue(clonedTarget).ToString();
             if (drawer.FieldInfo != null)
             {
                 val = drawer.FieldInfo.GetValue(clonedTarget).ToString();
             }
+
             field.SetValueWithoutNotify(val);
             if (!cleanupImmediate) return;
-            
+
             var obj = (Component)clonedTarget;
             Object.DestroyImmediate(obj.gameObject);
         }
+
         #endregion
 
         private static void OnPropertyBuilt(GeometryChangedEvent evt)
         {
             var field = (PropertyField)evt.target;
             if (field is not { childCount: > 0 }) return;
-            
+
             field.UnregisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
             OnPropertyBuilt(field);
         }
@@ -303,11 +424,11 @@ namespace VaporUIElementsEditor
         {
             var button = (StyledButton)evt.target;
             if (button == null) return;
-            
+
             button.UnregisterCallback<GeometryChangedEvent>(OnMethodBuilt);
             OnMethodBuilt(button);
         }
-        
+
         public static void OnPropertyBuilt(PropertyField field)
         {
             var list = field.Q<ListView>();
@@ -315,6 +436,7 @@ namespace VaporUIElementsEditor
             {
                 list.Q<Toggle>().style.marginLeft = 3;
             }
+
             List<Action> resolvers = new();
 
             // Debug.Log(field.name);
@@ -322,7 +444,7 @@ namespace VaporUIElementsEditor
             {
                 return;
             }
-            
+
             var prop = drawer.Property;
             if (prop.propertyType == SerializedPropertyType.Generic && !drawer.IsDrawnWithVapor)
             {
@@ -361,7 +483,7 @@ namespace VaporUIElementsEditor
             DrawDecorators(field, drawer);
             DrawLabel(field, drawer, resolvers);
             DrawLabelWidth(field, drawer);
-            DrawHideLabel(field, drawer);  
+            DrawHideLabel(field, drawer);
             DrawRichTooltip(field, drawer);
             DrawConditionals(field, drawer, resolvers);
             DrawReadOnly(field, drawer);
@@ -399,6 +521,7 @@ namespace VaporUIElementsEditor
         }
 
         #region Attribute Drawers
+
         public static void DrawLabel(PropertyField field, VaporDrawerInfo drawer, List<Action> resolvers)
         {
             if (drawer.TryGetAttribute<LabelAttribute>(out var atr))
@@ -463,6 +586,7 @@ namespace VaporUIElementsEditor
                             resolvers.Add(() => image.tintColor = (Color)mi.Invoke(drawer.Target, null));
                             break;
                     }
+
                     label.Add(image);
                 }
             }
@@ -500,7 +624,7 @@ namespace VaporUIElementsEditor
         public static void DrawRichTooltip(PropertyField field, VaporDrawerInfo drawer)
         {
             if (!drawer.TryGetAttribute<RichTextTooltipAttribute>(out var rtAtr)) return;
-            
+
             var label = field.Q<Label>();
             label.tooltip = rtAtr.Tooltip;
         }
@@ -518,14 +642,17 @@ namespace VaporUIElementsEditor
                 {
                     field.style.marginBottom = matr.Bottom;
                 }
+
                 if (matr.Top != float.MinValue)
                 {
                     field.style.marginTop = matr.Top;
                 }
+
                 if (matr.Left != float.MinValue)
                 {
                     field.style.marginLeft = matr.Left;
                 }
+
                 if (matr.Right != float.MinValue)
                 {
                     field.style.marginRight = matr.Right;
@@ -538,14 +665,17 @@ namespace VaporUIElementsEditor
                 {
                     field.style.paddingBottom = patr.Bottom;
                 }
+
                 if (patr.Top != float.MinValue)
                 {
                     field.style.paddingTop = patr.Top;
                 }
+
                 if (patr.Left != float.MinValue)
                 {
                     field.style.paddingLeft = patr.Left;
                 }
+
                 if (patr.Right != float.MinValue)
                 {
                     field.style.paddingRight = patr.Right;
@@ -559,21 +689,25 @@ namespace VaporUIElementsEditor
                     field.style.borderBottomWidth = batr.Bottom;
                     field.style.borderBottomColor = batr.Color;
                 }
+
                 if (batr.Top != float.MinValue)
                 {
                     field.style.borderTopWidth = batr.Top;
                     field.style.borderTopColor = batr.Color;
                 }
+
                 if (batr.Left != float.MinValue)
                 {
                     field.style.borderLeftWidth = batr.Left;
                     field.style.borderLeftColor = batr.Color;
                 }
+
                 if (batr.Right != float.MinValue)
                 {
                     field.style.borderRightWidth = batr.Right;
                     field.style.borderRightColor = batr.Color;
                 }
+
                 if (batr.Rounded)
                 {
                     field.style.borderBottomLeftRadius = 3;
@@ -781,6 +915,7 @@ namespace VaporUIElementsEditor
                 {
                     labelText = $"<b>{atr.Title}</b>\n<color=#9E9E9E><i><size=10>{atr.Subtitle}</size></i></color>";
                 }
+
                 var title = new Label(labelText);
                 title.style.borderBottomWidth = atr.Underline ? 1 : 0;
                 title.style.paddingBottom = 2;
@@ -832,6 +967,7 @@ namespace VaporUIElementsEditor
                                         break;
                                 }
                             }
+
                             inlineButton.Add(image);
                         }
 
@@ -870,10 +1006,12 @@ namespace VaporUIElementsEditor
                 {
                     comp = component.GetComponentInChildren(drawer.FieldInfo.FieldType, true);
                 }
+
                 if (!comp && atr.SearchParents)
                 {
                     comp = component.GetComponentInParent(drawer.FieldInfo.FieldType, true);
                 }
+
                 drawer.Property.objectReferenceValue = comp;
                 drawer.Property.serializedObject.ApplyModifiedProperties();
             }

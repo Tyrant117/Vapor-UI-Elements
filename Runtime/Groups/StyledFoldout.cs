@@ -20,8 +20,6 @@ namespace VaporUIElements
             StyleFoldout(header);
 
             hierarchy.Add(Foldout);
-            //Foldout.AddToClassList("unity-inspector-element");
-            //Foldout.AddToClassList("unity-inspector-main-container");
         }
 
         protected virtual void StyleBox()

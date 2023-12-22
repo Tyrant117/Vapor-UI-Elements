@@ -8,6 +8,7 @@ namespace VaporUIElements
     {
         None,
         Property,
-        Method
+        Method,
+        Field
     }
 }

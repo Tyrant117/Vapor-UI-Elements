@@ -110,10 +110,28 @@ namespace VaporUIElementsEditor
         /// </summary>
         /// <param name="target"></param>
         /// <returns></returns>
-        private static List<Type> GetSelfAndBaseTypes(object target)
+        public static List<Type> GetSelfAndBaseTypes(object target)
         {
             _typeCache.Clear();
             _typeCache.Add(target.GetType());
+            while (_typeCache[^1].BaseType != null)
+            {
+                _typeCache.Add(_typeCache[^1].BaseType);
+            }
+
+            return _typeCache;
+        }
+
+        /// <summary>
+        ///		Get type and all base types of target, sorted as following:
+        ///		<para />[target's type, base type, base's base type, ...]
+        /// </summary>
+        /// <param name="target"></param>
+        /// <returns></returns>
+        public static List<Type> GetSelfAndBaseTypes(Type target)
+        {
+            _typeCache.Clear();
+            _typeCache.Add(target);
             while (_typeCache[^1].BaseType != null)
             {
                 _typeCache.Add(_typeCache[^1].BaseType);

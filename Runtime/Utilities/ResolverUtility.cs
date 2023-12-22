@@ -11,11 +11,11 @@ namespace VaporUIElements
             type = ResolverType.None;
             if (!string.IsNullOrEmpty(resolver))
             {
-                char first = resolver[0];
-                bool hasResolver = first.Equals('$') || first.Equals('@');
+                var first = resolver[0];
+                var hasResolver = first.Equals('$') || first.Equals('@') || first.Equals('%');
                 if (hasResolver)
                 {
-                    type = first.Equals('$') ? ResolverType.Property : ResolverType.Method;
+                    type = first.Equals('$') ? ResolverType.Property : first.Equals('@') ? ResolverType.Method : ResolverType.Field;
                 }
                 return hasResolver;
             }
@@ -40,7 +40,7 @@ namespace VaporUIElements
                 {
                     color = ColorUtility.TryParseHtmlString(colorStringResolver, out var htmlColor) ? htmlColor : Color.white;
                 }
-                else if (ResolverUtility.HasResolver(colorStringResolver, out var type))
+                else if (HasResolver(colorStringResolver, out var type))
                 {
                     resolver = type;
                 }
