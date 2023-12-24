@@ -9,7 +9,8 @@ namespace VaporUIElementsEditor
     public static class FolderSetupUtility
     {
         public const string EditorNamespace = "VaporUIEditor";
-        public const string RelativePath = "Vapor/Editor/Inspectors";
+        public const string DrawerRelativePath = "Vapor/Editor/Inspectors";
+        public const string InspectorRelativePath = "Vapor/Editor/Inspectors";
         
         [InitializeOnLoadMethod]
         private static void SetupFolders()

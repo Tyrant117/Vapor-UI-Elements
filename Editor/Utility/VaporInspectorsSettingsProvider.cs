@@ -17,21 +17,26 @@ namespace VaporUIElementsEditor
             SettingsService.OpenUserPreferences("Vapor/Inspector Settings");
         }
 
-        [MenuItem("Tools/Vapor/Inspector/Create Editors From Selection", false, 1)]
-        private static void CreateEditorsFromSelection()
+        [MenuItem("Tools/Vapor/Inspector/Create Inspectors From Selection", false, 1)]
+        private static void CreateInspectorsFromSelection()
         {
             AssetDatabase.StartAssetEditing();
             var items = Selection.objects;
             foreach (var item in items)
             {
                 if (item is not MonoScript script) continue;
-                
+
                 var type = script.GetClass();
                 if (type.IsSubclassOf(typeof(Object)))
                 {
                     _CreateEditorClassFile(type.Name);
                 }
+                else
+                {
+                    _CreatePropertyDrawerClassFile(type.Name);
+                }
             }
+
             AssetDatabase.StopAssetEditing();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -57,7 +62,29 @@ namespace VaporUIElementsEditor
                 sb.Append("#endif\n");
                 sb.Append("}");
 
-                System.IO.File.WriteAllText($"{Application.dataPath}/{FolderSetupUtility.RelativePath}/{className}Editor.cs", sb.ToString());
+                System.IO.File.WriteAllText($"{Application.dataPath}/{FolderSetupUtility.InspectorRelativePath}/{className}Editor.cs", sb.ToString());
+            }
+            
+            static void _CreatePropertyDrawerClassFile(string className)
+            {
+                StringBuilder sb = new();
+                
+                sb.Append("//\t* THIS SCRIPT IS AUTO-GENERATED *\n");
+                sb.Append("using UnityEditor;\n");
+                sb.Append("using VaporUIElementsEditor;\n");
+
+                sb.Append($"namespace {FolderSetupUtility.EditorNamespace}\n");
+                sb.Append("{\n");
+                sb.Append("#if VAPOR_INSPECTOR\n");
+                sb.Append($"\t[CustomPropertyDrawer(typeof({className}), true)]\n");
+                sb.Append($"\tpublic class {className}Drawer : PropertyDrawer\n");
+                sb.Append("\t{\n");
+                
+                sb.Append("\t}\n");
+                sb.Append("#endif\n");
+                sb.Append("}");
+
+                System.IO.File.WriteAllText($"{Application.dataPath}/{FolderSetupUtility.DrawerRelativePath}/{className}Drawer.cs", sb.ToString());
             }
         }
     }

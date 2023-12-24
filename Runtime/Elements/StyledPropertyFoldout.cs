@@ -36,7 +36,7 @@ namespace VaporUIElements
             if (evt.target is PropertyField propertyField && propertyField.childCount > 0)
             {
                 propertyField.UnregisterCallback<GeometryChangedEvent>(OnPropertyBuilt);
-                Debug.Log(propertyField.Q<TextElement>());
+                // Debug.Log(propertyField.Q<TextElement>());
                 propertyField.Q<TextElement>().style.marginLeft = 0;
             }
         }
@@ -55,7 +55,7 @@ namespace VaporUIElements
             var togStyle = Foldout.Q<Toggle>().style;
             togStyle.backgroundColor = ContainerStyles.InspectorBackgroundColor;
             Label.AddToClassList("unity-base-field__label");
-            Label.AddToClassList("unity-property-field__label");
+            // Label.AddToClassList("unity-property-field__label");
         }
     }
 }

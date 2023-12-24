@@ -29,6 +29,16 @@ namespace VaporUIElementsEditor
             switch (drawer.InfoType)
             {
                 case DrawerInfoType.Field:
+                    if (HasCustomPropertyDrawer(drawer.FieldInfo.FieldType))
+                    {
+                        var field = new PropertyField(drawer.Property)
+                        {
+                            name = drawerName,
+                            userData = drawer,
+                        };
+                        return field;
+                    }
+                    
                     if (drawer.TryGetAttribute<ValueDropdownAttribute>(out var dropdownAtr))
                     {
                         return DrawVaporValueDropdown(drawer, drawerName, dropdownAtr);
@@ -327,7 +337,9 @@ namespace VaporUIElementsEditor
             {
                 name = drawerName,
             };
-            prop.Q<Label>().tooltip = tooltip;
+            var label = prop.Q<Label>();
+            label.tooltip = tooltip;
+            label.AddToClassList("unity-base-field__label");
             prop.SetValueWithoutNotify(val);
             prop.SetEnabled(false);
             // if (cleanupImmediate)
@@ -1046,7 +1058,7 @@ namespace VaporUIElementsEditor
                 if (methodInfo != null)
                 {
                     bool validated = _OnValidateInput(drawer.Property, methodInfo, drawer.Target);
-                    image.style.display = validated ? (StyleEnum<DisplayStyle>)DisplayStyle.None : (StyleEnum<DisplayStyle>)DisplayStyle.Flex;
+                    image.style.display = validated ? DisplayStyle.None : DisplayStyle.Flex;
                     field.RegisterValueChangeCallback(x => _ValidateInput(x, methodInfo, drawer.Target));
                 }
             }
@@ -1056,7 +1068,7 @@ namespace VaporUIElementsEditor
                 bool validated = _OnValidateInput(evt.changedProperty, mi, target);
                 var field = evt.target as PropertyField;
                 var image = field.Q<Image>("image-error");
-                image.style.display = validated ? (StyleEnum<DisplayStyle>)DisplayStyle.None : (StyleEnum<DisplayStyle>)DisplayStyle.Flex;
+                image.style.display = validated ? DisplayStyle.None : DisplayStyle.Flex;
             }
 
             static bool _OnValidateInput(SerializedProperty sp, MethodInfo mi, object target)
@@ -1093,6 +1105,27 @@ namespace VaporUIElementsEditor
                     _ => false,
                 };
             }
+        }
+
+        #endregion
+
+        #region Helpers
+
+        private static MethodInfo _getDrawerTypeForTypeInfo;
+
+        private static bool HasCustomPropertyDrawer(Type type)
+        {
+            if (_getDrawerTypeForTypeInfo == null)
+            {
+                // Cache the method info
+                var assembly = typeof(Editor).Assembly;
+                var scriptAttributeUtilityType = assembly.GetType("UnityEditor.ScriptAttributeUtility");
+                _getDrawerTypeForTypeInfo = scriptAttributeUtilityType.GetMethod("GetDrawerTypeForType", BindingFlags.NonPublic | BindingFlags.Static);
+            }
+
+            // ReSharper disable once PossibleNullReferenceException
+            var drawerType = (Type)_getDrawerTypeForTypeInfo.Invoke(null, new object[] { type });
+            return drawerType != null;
         }
 
         #endregion
