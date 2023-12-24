@@ -1,6 +1,6 @@
 {
   "name": "com.carbonfibergames.vaporuielements",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "displayName": "Vapor UI Elements",
   "description": "Core ui elements package for drawing interfaces.",
   "unity": "2022.3",

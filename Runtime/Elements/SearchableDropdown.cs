@@ -21,7 +21,7 @@ namespace VaporUIElements
         public T Value { get; set; }
         public int Index { get; set; } = -1;
 
-        public Action<T,T> ValueChanged;
+        public Action<VisualElement, T,T> ValueChanged;
 
         public SearchableDropdown(string label, T currentValue) : base(label)
         {
@@ -158,12 +158,12 @@ namespace VaporUIElements
         private void OnSelect(object obj)
         {
             if (obj is not T s) return;
-            
+
             Index = _unfilteredChoices.FindIndex(arg => arg.ToString() == s.ToString());
             value = s.ToString();
             var oldValue = Value;
             Value = s;
-            ValueChanged?.Invoke(oldValue, s);
+            ValueChanged?.Invoke(this, oldValue, s);
             Debug.Log($"Selected {Index} {value}");
         }
 
